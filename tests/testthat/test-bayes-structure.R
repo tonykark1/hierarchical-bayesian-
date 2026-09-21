@@ -1,7 +1,4 @@
 testthat::test_that("Bayesian panel preparation preserves one sector per stock", {
-  source("R/simulation.R")
-  source("R/model_bayes.R")
-
   sim <- simulate_factor_panel(n_stocks = 24, n_sectors = 6, n_obs = 52, seed = 21)
   d <- prepare_bayes_panel(sim$panel, sim$metadata$factor_names)
 
@@ -17,8 +14,6 @@ testthat::test_that("Bayesian panel preparation preserves one sector per stock",
 })
 
 testthat::test_that("hierarchical formula contains market, sector and stock levels", {
-  source("R/model_bayes.R")
-
   factors <- c("MKT", "HML", "MOM")
   txt <- paste(deparse(make_hierarchical_factor_formula(factors)), collapse = " ")
 
@@ -32,8 +27,6 @@ testthat::test_that("hierarchical formula contains market, sector and stock leve
 })
 
 testthat::test_that("independent formula has no pooling terms", {
-  source("R/model_bayes.R")
-
   factors <- c("MKT", "HML", "MOM")
   txt <- paste(deparse(make_independent_factor_formula(factors)), collapse = " ")
 
@@ -45,9 +38,6 @@ testthat::test_that("independent formula has no pooling terms", {
 })
 
 testthat::test_that("Bayesian panel preparation rejects changing sector membership", {
-  source("R/simulation.R")
-  source("R/model_bayes.R")
-
   sim <- simulate_factor_panel(n_stocks = 12, n_sectors = 3, n_obs = 26, seed = 22)
   bad <- sim$panel
   first_stock <- bad$stock[1]
@@ -61,9 +51,6 @@ testthat::test_that("Bayesian panel preparation rejects changing sector membersh
 })
 
 testthat::test_that("hierarchical design summary reports expected dimensions", {
-  source("R/simulation.R")
-  source("R/model_bayes.R")
-
   sim <- simulate_factor_panel(n_stocks = 30, n_sectors = 5, n_obs = 26, seed = 23)
   summary <- validate_hierarchical_design(sim$panel, sim$metadata$factor_names)
 
@@ -75,8 +62,6 @@ testthat::test_that("hierarchical design summary reports expected dimensions", {
 })
 
 testthat::test_that("draw-vector summary returns posterior-compatible schema", {
-  source("R/model_bayes.R")
-
   x <- seq(-1, 1, length.out = 101)
   s <- summarise_draw_vector(x)
 
@@ -87,8 +72,6 @@ testthat::test_that("draw-vector summary returns posterior-compatible schema", {
 })
 
 testthat::test_that("default core selection is always a positive integer", {
-  source("R/model_bayes.R")
-
   cores <- default_bayes_cores(4L)
   testthat::expect_true(is.numeric(cores))
   testthat::expect_gte(cores, 1L)
