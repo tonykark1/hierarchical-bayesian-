@@ -1,0 +1,41 @@
+name: Bayesian recovery smoke
+
+on:
+  push:
+    branches: [phase-2-bayesian]
+    paths:
+      - "R/**"
+      - "scripts/run_bayes_smoke.R"
+      - ".github/workflows/bayes-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  bayes-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Install Bayesian dependencies
+        run: Rscript -e 'install.packages(c("brms", "posterior"))'
+
+      - name: Run Bayesian recovery smoke experiment
+        run: Rscript scripts/run_bayes_smoke.R
+
+      - name: Upload Bayesian smoke results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bayesian-smoke-results
+          path: |
+            output/bayes_smoke_recovery.csv
+            output/bayes_smoke_coverage.csv
+            output/bayes_smoke_diagnostics.csv
+            output/bayes_smoke_vs_ridge.csv
+          if-no-files-found: error
