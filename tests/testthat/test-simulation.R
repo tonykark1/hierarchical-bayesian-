@@ -1,6 +1,4 @@
 testthat::test_that("simulation is reproducible under a fixed seed", {
-  source("R/simulation.R")
-
   a <- simulate_factor_panel(n_stocks = 20, n_sectors = 4, n_obs = 52, seed = 42)
   b <- simulate_factor_panel(n_stocks = 20, n_sectors = 4, n_obs = 52, seed = 42)
 
@@ -10,8 +8,6 @@ testthat::test_that("simulation is reproducible under a fixed seed", {
 })
 
 testthat::test_that("simulation dimensions and hierarchy are correct", {
-  source("R/simulation.R")
-
   n_stocks <- 24
   n_sectors <- 6
   n_obs <- 104
@@ -32,10 +28,6 @@ testthat::test_that("simulation dimensions and hierarchy are correct", {
 })
 
 testthat::test_that("OLS estimates join exactly to true betas", {
-  source("R/simulation.R")
-  source("R/model_ols.R")
-  source("R/evaluation.R")
-
   sim <- simulate_factor_panel(n_stocks = 20, n_sectors = 4, n_obs = 104, seed = 9)
   est <- fit_ols_betas(sim$panel, sim$metadata$factor_names)
   joined <- join_estimates_to_truth(est, sim$truth$stock)
