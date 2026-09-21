@@ -1,8 +1,12 @@
 # Evaluation helpers shared by simulation and later out-of-sample experiments.
 
-join_estimates_to_truth <- function(estimates, truth) {
-  req_est <- c("stock", "sector", "factor", "estimate")
-  req_truth <- c("stock", "sector", "factor", "beta")
+join_estimates_to_truth <- function(estimates, truth, match_sector = TRUE) {
+  req_est <- c("stock", "factor", "estimate")
+  req_truth <- c("stock", "factor", "beta")
+  if (isTRUE(match_sector)) {
+    req_est <- c(req_est, "sector")
+    req_truth <- c(req_truth, "sector")
+  }
 
   miss_est <- setdiff(req_est, names(estimates))
   miss_truth <- setdiff(req_truth, names(truth))
@@ -13,10 +17,18 @@ join_estimates_to_truth <- function(estimates, truth) {
     stop("truth missing: ", paste(miss_truth, collapse = ", "))
   }
 
+  by_cols <- c("stock", "factor")
+  if (isTRUE(match_sector)) by_cols <- c("stock", "sector", "factor")
+
+  truth_join <- truth[, unique(c(by_cols, "beta")), drop = FALSE]
+  if (anyDuplicated(truth_join[, by_cols, drop = FALSE])) {
+    stop("truth contains duplicate keys for the requested join")
+  }
+
   merged <- merge(
     estimates,
-    truth,
-    by = c("stock", "sector", "factor"),
+    truth_join,
+    by = by_cols,
     all.x = TRUE,
     sort = FALSE
   )
@@ -57,6 +69,50 @@ summarise_beta_recovery <- function(joined) {
     bias = mean(joined$error),
     mae = mean(joined$abs_error),
     rmse = sqrt(mean(joined$sq_error)),
+    stringsAsFactors = FALSE
+  )
+
+  out <- rbind(do.call(rbind, rows), overall)
+  rownames(out) <- NULL
+  out
+}
+
+summarise_interval_recovery <- function(joined) {
+  required <- c("factor", "beta", "lower", "upper")
+  missing_cols <- setdiff(required, names(joined))
+  if (length(missing_cols) > 0L) {
+    stop("joined data missing interval columns: ", paste(missing_cols, collapse = ", "))
+  }
+  if (any(joined$lower > joined$upper, na.rm = TRUE)) {
+    stop("lower interval bound exceeds upper interval bound")
+  }
+
+  valid <- is.finite(joined$beta) & is.finite(joined$lower) & is.finite(joined$upper)
+  d0 <- joined[valid, , drop = FALSE]
+  if (nrow(d0) == 0L) stop("No finite posterior intervals available")
+
+  d0$covered <- d0$beta >= d0$lower & d0$beta <= d0$upper
+  d0$interval_width <- d0$upper - d0$lower
+
+  factors <- unique(d0$factor)
+  rows <- lapply(factors, function(f) {
+    d <- d0[d0$factor == f, , drop = FALSE]
+    data.frame(
+      factor = f,
+      n = nrow(d),
+      coverage = mean(d$covered),
+      mean_width = mean(d$interval_width),
+      median_width = stats::median(d$interval_width),
+      stringsAsFactors = FALSE
+    )
+  })
+
+  overall <- data.frame(
+    factor = "ALL",
+    n = nrow(d0),
+    coverage = mean(d0$covered),
+    mean_width = mean(d0$interval_width),
+    median_width = stats::median(d0$interval_width),
     stringsAsFactors = FALSE
   )
 

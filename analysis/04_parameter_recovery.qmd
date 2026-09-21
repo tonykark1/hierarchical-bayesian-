@@ -1,0 +1,250 @@
+---
+title: "Parameter Recovery: OLS, Ridge, Independent Bayes, Hierarchical Bayes"
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This notebook is the first experiment that can justify the hierarchical model.
+
+The estimators are:
+
+1. OLS;
+2. ridge with expanding-window tuning;
+3. independent Bayesian regression with no information sharing across stocks;
+4. hierarchical Bayesian regression with market -> sector -> stock partial pooling.
+
+All are scored against known simulated stock betas.
+
+```{r}
+source("R/simulation.R")
+source("R/model_ols.R")
+source("R/model_ridge.R")
+source("R/model_bayes.R")
+source("R/hierarchy_stress.R")
+source("R/evaluation.R")
+
+factor_names <- c("MKT", "SMB", "HML", "RMW", "CMA", "MOM")
+```
+
+## Start small
+
+Do not begin with 100 stocks and the full sample-size grid. First prove that the entire pipeline works on a small synthetic panel.
+
+```{r}
+sim <- simulate_hierarchy_scenario(
+  scenario = "balanced",
+  n_stocks = 20L,
+  n_sectors = 4L,
+  n_obs = 104L,
+  seed = 123L
+)
+```
+
+## Frequentist baselines
+
+```{r}
+ols <- fit_ols_betas(sim$panel, factor_names)
+ridge <- fit_ridge_betas(
+  sim$panel,
+  factor_names,
+  lambda_grid = ridge_lambda_grid(n = 21L)
+)
+
+ols_joined <- join_estimates_to_truth(ols, sim$truth$stock)
+ridge_joined <- join_estimates_to_truth(ridge, sim$truth$stock)
+
+ols_recovery <- summarise_beta_recovery(ols_joined)
+ridge_recovery <- summarise_beta_recovery(ridge_joined)
+```
+
+## Prior predictive check first
+
+Do not execute posterior fits until the prior-predictive notebook has been reviewed.
+
+```{r eval=false}
+prior_fit <- fit_hierarchical_prior_predictive(
+  sim$panel,
+  factor_names,
+  chains = 4L,
+  iter = 1000L,
+  seed = 123L
+)
+
+brms::pp_check(prior_fit, ndraws = 100)
+```
+
+## Independent Bayesian benchmark
+
+For the first end-to-end test, fit only 20 stocks. This implementation intentionally estimates each stock separately so there is no accidental cross-stock pooling.
+
+```{r eval=false}
+independent_fit <- fit_independent_bayes(
+  sim$panel,
+  factor_names,
+  chains = 2L,
+  iter = 1500L,
+  warmup = 750L,
+  seed = 123L
+)
+
+independent <- extract_independent_betas(
+  independent_fit,
+  sim$panel,
+  factor_names
+)
+
+independent_joined <- join_estimates_to_truth(
+  independent,
+  sim$truth$stock
+)
+
+independent_recovery <- summarise_beta_recovery(independent_joined)
+independent_intervals <- summarise_interval_recovery(independent_joined)
+```
+
+## Hierarchical Bayesian fit
+
+```{r eval=false}
+hierarchical_fit <- fit_hierarchical_bayes(
+  sim$panel,
+  factor_names,
+  chains = 4L,
+  iter = 2000L,
+  warmup = 1000L,
+  seed = 123L,
+  adapt_delta = 0.95,
+  max_treedepth = 12L
+)
+
+hierarchical_diagnostics <- summarise_brms_diagnostics(
+  hierarchical_fit,
+  max_treedepth = 12L
+)
+hierarchical_diagnostics
+
+hierarchical <- extract_hierarchical_betas(
+  hierarchical_fit,
+  sim$panel,
+  factor_names
+)
+
+hierarchical_joined <- join_estimates_to_truth(
+  hierarchical,
+  sim$truth$stock
+)
+
+hierarchical_recovery <- summarise_beta_recovery(hierarchical_joined)
+hierarchical_intervals <- summarise_interval_recovery(hierarchical_joined)
+```
+
+## Acceptance gate
+
+Before comparing RMSE, require the hierarchical fit to satisfy the diagnostics gate.
+
+```{r eval=false}
+stopifnot(
+  hierarchical_diagnostics$max_rhat < 1.01,
+  hierarchical_diagnostics$divergences == 0,
+  hierarchical_diagnostics$max_treedepth_hits == 0
+)
+```
+
+ESS thresholds should be reviewed at parameter level rather than reduced to one arbitrary universal number.
+
+## Common recovery table
+
+```{r eval=false}
+ols_recovery$estimator <- "OLS"
+ridge_recovery$estimator <- "Ridge"
+independent_recovery$estimator <- "Independent Bayes"
+hierarchical_recovery$estimator <- "Hierarchical Bayes"
+
+recovery <- rbind(
+  ols_recovery,
+  ridge_recovery,
+  independent_recovery,
+  hierarchical_recovery
+)
+
+recovery[order(recovery$factor, recovery$rmse), ]
+```
+
+## Shrinkage plot
+
+The core visual should show the true beta, OLS estimate, ridge estimate, independent Bayesian posterior mean, and hierarchical posterior mean for the same stock-factor observations.
+
+Do not cherry-pick only the most dramatic shrinkage examples. Plot all stocks for at least MKT, HML, and MOM, then provide the full six-factor table separately.
+
+## Hierarchy-strength experiment
+
+After the balanced case works, repeat the same recovery experiment under:
+
+```{r}
+hierarchy_scenarios()
+```
+
+Expected interpretation:
+
+- `none`: sector identity should add little or no information;
+- `weak`: hierarchical gains should be modest;
+- `balanced`: partial pooling has a genuine opportunity to help;
+- `strong`: sector pooling should be most useful, especially in short samples.
+
+This expectation is a hypothesis, not a result.
+
+## Wrong-hierarchy experiment
+
+Then deliberately corrupt 25% and 50% of stock sector labels:
+
+```{r}
+corrupted_25 <- corrupt_sector_labels(sim$panel, 0.25, seed = 200)
+corrupted_50 <- corrupt_sector_labels(sim$panel, 0.50, seed = 201)
+
+sector_mapping_accuracy(corrupted_25)
+sector_mapping_accuracy(corrupted_50)
+```
+
+When evaluating a corrupted hierarchy, match estimated betas to truth by stock and factor rather than by the deliberately wrong observed sector:
+
+```{r eval=false}
+wrong_hierarchy_fit <- fit_hierarchical_bayes(
+  corrupted_25,
+  factor_names,
+  chains = 4L,
+  iter = 2000L,
+  seed = 202L
+)
+
+wrong_hierarchy_est <- extract_hierarchical_betas(
+  wrong_hierarchy_fit,
+  corrupted_25,
+  factor_names
+)
+
+wrong_hierarchy_joined <- join_estimates_to_truth(
+  wrong_hierarchy_est,
+  sim$truth$stock,
+  match_sector = FALSE
+)
+```
+
+A credible project should show where hierarchical shrinkage becomes harmful when the economic grouping is wrong.
+
+## Expansion order
+
+Only after the 20-stock experiment is correct:
+
+1. increase to 50 stocks;
+2. increase to 100 stocks;
+3. run the sample-size grid 26 / 52 / 104 / 156 / 260 / 520;
+4. run hierarchy-strength scenarios;
+5. run label corruption;
+6. automate prior sensitivity;
+7. then consider real data.

@@ -1,0 +1,141 @@
+---
+title: "Hierarchical Bayesian Factor Model: Prior Predictive Protocol"
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Objective
+
+Before looking at posterior parameter recovery, verify that the prior implies plausible weekly stock returns and plausible cross-sectional variation in factor exposures.
+
+The v0.1 hierarchy is
+
+\[
+\beta_{i,k} = \beta_{0,k} + u_{s(i),k} + v_{i,k},
+\]
+
+with
+
+\[
+u_{s,k} \sim N(0, \tau_{sector,k}^2),
+\qquad
+v_{i,k} \sim N(0, \tau_{stock,k}^2).
+\]
+
+The first implementation uses a common sector-level standard deviation and a common stock-level standard deviation for each factor across all sectors. It does **not** estimate a separate `tau` for every sector. That more flexible model should only be introduced if posterior predictive checks or out-of-sample evidence show that the simpler hierarchy is inadequate.
+
+Group-level correlations are also disabled initially. This makes the first research question clean: does partial pooling of individual factor slopes help?
+
+```{r}
+source("R/simulation.R")
+source("R/model_bayes.R")
+
+sim <- simulate_factor_panel(
+  n_stocks = 40L,
+  n_sectors = 8L,
+  n_obs = 104L,
+  seed = 123L
+)
+
+design <- validate_hierarchical_design(
+  sim$panel,
+  sim$metadata$factor_names
+)
+design
+
+make_hierarchical_factor_formula(sim$metadata$factor_names)
+```
+
+## Initial prior family
+
+For the first fit, the intended scales are:
+
+- population factor slopes: `Normal(0, 1)`;
+- population intercept: `Normal(0, 0.01)`;
+- sector and stock factor-slope standard deviations: half-`Normal(0, 0.35)`;
+- sector and stock intercept standard deviations: half-`Normal(0, 0.01)`;
+- residual volatility: half-`Student-t(3, 0, 0.03)`.
+
+These are starting points, not sacred constants. They must survive prior-predictive simulation.
+
+## Prior predictive fit
+
+The following is intentionally separated from posterior fitting.
+
+```{r eval=false}
+prior_fit <- fit_hierarchical_prior_predictive(
+  panel = sim$panel,
+  factor_names = sim$metadata$factor_names,
+  chains = 4L,
+  iter = 1000L,
+  seed = 123L,
+  backend = "cmdstanr"
+)
+
+brms::pp_check(prior_fit, ndraws = 100)
+```
+
+## Prior-predictive rejection rules
+
+Do **not** proceed to posterior recovery merely because Stan samples successfully. Revise the prior if it puts substantial mass on obviously implausible weekly outcomes.
+
+For the synthetic design, inspect at least:
+
+1. the distribution of simulated weekly returns;
+2. the implied cross-sectional spread of market betas;
+3. the implied cross-sectional spread of the smaller style-factor betas;
+4. the implied residual volatility;
+5. whether prior draws routinely imply absurd multi-standard-deviation weekly returns.
+
+The exact cutoffs should be documented after seeing the scale of the simulated inputs, but they must be chosen for economic plausibility rather than to improve posterior results.
+
+## First posterior recovery fit
+
+Only after the prior-predictive check passes:
+
+```{r eval=false}
+fit <- fit_hierarchical_bayes(
+  panel = sim$panel,
+  factor_names = sim$metadata$factor_names,
+  chains = 4L,
+  iter = 2000L,
+  warmup = 1000L,
+  seed = 123L,
+  backend = "cmdstanr",
+  adapt_delta = 0.95,
+  max_treedepth = 12L
+)
+
+summary(fit)
+brms::pp_check(fit)
+```
+
+## Diagnostics required before interpreting shrinkage
+
+A fit is not accepted solely because posterior means look reasonable. Record:
+
+- split R-hat, with a target below 1.01;
+- bulk ESS;
+- tail ESS;
+- divergent transitions;
+- maximum-treedepth warnings;
+- posterior predictive checks;
+- parameter recovery against the known stock betas;
+- interval coverage;
+- sensitivity to at least one narrower and one wider prior scale.
+
+## Core comparison
+
+The posterior recovery experiment must eventually report the same schema for:
+
+1. OLS;
+2. ridge;
+3. independent Bayesian regression;
+4. hierarchical Bayesian regression.
+
+The hierarchical model earns its extra complexity only if it improves recovery or uncertainty calibration beyond generic ridge shrinkage.
