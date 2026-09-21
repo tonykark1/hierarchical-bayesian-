@@ -1,0 +1,106 @@
+---
+title: "Phase 1: Simulation and OLS parameter recovery"
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+---
+
+## Purpose
+
+Before fitting any hierarchical Bayesian model to market data, verify that the data-generating process is internally consistent and that a conventional OLS estimator recovers the known stock-level factor betas as information increases.
+
+This notebook is intentionally simple. It is the baseline against which ridge, independent Bayesian, and hierarchical Bayesian estimators will be compared.
+
+```{r}
+source("../R/simulation.R")
+source("../R/model_ols.R")
+source("../R/evaluation.R")
+```
+
+## One simulated panel
+
+```{r}
+sim <- simulate_factor_panel(
+  n_stocks = 100,
+  n_sectors = 10,
+  n_obs = 156,
+  seed = 123
+)
+
+str(sim$metadata)
+head(sim$truth$stock)
+```
+
+The hierarchy is known by construction:
+
+```text
+market factor mean
+      |
+sector factor beta
+      |
+ stock factor beta
+      |
+ observed return
+```
+
+## OLS recovery
+
+```{r}
+ols <- fit_ols_betas(sim$panel, sim$metadata$factor_names)
+recovery <- join_estimates_to_truth(ols, sim$truth$stock)
+summarise_beta_recovery(recovery)
+```
+
+## Estimated versus true betas
+
+```{r}
+plot(
+  recovery$beta,
+  recovery$estimate,
+  xlab = "True beta",
+  ylab = "OLS estimate",
+  main = "OLS recovery across stocks and factors"
+)
+abline(a = 0, b = 1)
+```
+
+## Data-scarcity baseline
+
+The key future experiment asks whether hierarchical shrinkage becomes more valuable as the stock-level sample becomes shorter. First establish the OLS error curve.
+
+```{r}
+ols_curve <- run_ols_recovery_experiment(
+  sample_sizes = c(26, 52, 104, 156, 260, 520),
+  n_stocks = 100,
+  n_sectors = 10,
+  seed = 123
+)
+
+ols_all <- ols_curve[ols_curve$factor == "ALL", ]
+ols_all
+```
+
+```{r}
+plot(
+  ols_all$n_obs,
+  ols_all$rmse,
+  type = "b",
+  log = "x",
+  xlab = "Weekly observations (log scale)",
+  ylab = "Beta RMSE",
+  main = "OLS beta error versus available history"
+)
+```
+
+## Acceptance criteria for this phase
+
+- simulation is deterministic under a fixed seed;
+- dimensions and stock-sector mapping are correct;
+- every estimated beta joins to exactly one true beta;
+- OLS beta RMSE generally falls as the available history increases;
+- this notebook can be reproduced before any Bayesian model is introduced.
+
+The next estimator to add is ridge regression. Hierarchical Bayes will only be judged against OLS **and** a non-Bayesian shrinkage benchmark.
