@@ -1,0 +1,27 @@
+# R / RStudio
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# renv local library/cache
+renv/library/
+renv/staging/
+
+# targets cache
+_targets/
+_targets.RData
+
+# Quarto output
+analysis/*_files/
+analysis/*.html
+.quarto/
+
+# Local data and fitted model artifacts
+data/raw/
+data/processed/
+output/models/
+
+# OS/editor
+.DS_Store
+Thumbs.db
