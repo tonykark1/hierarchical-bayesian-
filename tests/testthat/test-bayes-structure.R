@@ -31,6 +31,19 @@ testthat::test_that("hierarchical formula contains market, sector and stock leve
   testthat::expect_match(txt, "\\|\\|")
 })
 
+testthat::test_that("independent formula has no pooling terms", {
+  source("R/model_bayes.R")
+
+  factors <- c("MKT", "HML", "MOM")
+  txt <- paste(deparse(make_independent_factor_formula(factors)), collapse = " ")
+
+  testthat::expect_match(txt, "MKT")
+  testthat::expect_match(txt, "HML")
+  testthat::expect_match(txt, "MOM")
+  testthat::expect_false(grepl("sector", txt, fixed = TRUE))
+  testthat::expect_false(grepl("|", txt, fixed = TRUE))
+})
+
 testthat::test_that("Bayesian panel preparation rejects changing sector membership", {
   source("R/simulation.R")
   source("R/model_bayes.R")
@@ -59,4 +72,25 @@ testthat::test_that("hierarchical design summary reports expected dimensions", {
   testthat::expect_equal(summary$n_factors, 6)
   testthat::expect_equal(summary$min_stocks_per_sector, 6)
   testthat::expect_equal(summary$max_stocks_per_sector, 6)
+})
+
+testthat::test_that("draw-vector summary returns posterior-compatible schema", {
+  source("R/model_bayes.R")
+
+  x <- seq(-1, 1, length.out = 101)
+  s <- summarise_draw_vector(x)
+
+  testthat::expect_equal(names(s), c("estimate", "std_error", "lower", "upper"))
+  testthat::expect_equal(unname(s["estimate"]), 0, tolerance = 1e-12)
+  testthat::expect_lt(s["lower"], s["estimate"])
+  testthat::expect_gt(s["upper"], s["estimate"])
+})
+
+testthat::test_that("default core selection is always a positive integer", {
+  source("R/model_bayes.R")
+
+  cores <- default_bayes_cores(4L)
+  testthat::expect_true(is.numeric(cores))
+  testthat::expect_gte(cores, 1L)
+  testthat::expect_lte(cores, 4L)
 })
