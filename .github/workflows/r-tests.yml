@@ -2,9 +2,9 @@ name: R tests
 
 on:
   push:
-    branches: [main, phase-1-simulation]
+    branches: [main, phase-1-simulation, phase-2-bayesian]
   pull_request:
-    branches: [main]
+    branches: [main, phase-1-simulation]
 
 jobs:
   test:
