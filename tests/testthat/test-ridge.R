@@ -1,6 +1,4 @@
 testthat::test_that("expanding splits never use future observations in training", {
-  source("R/model_ridge.R")
-
   splits <- make_expanding_splits(n = 52, initial = 26, assess = 5, max_splits = 4)
   testthat::expect_true(length(splits) >= 1)
 
@@ -12,10 +10,6 @@ testthat::test_that("expanding splits never use future observations in training"
 })
 
 testthat::test_that("ridge with near-zero penalty approximates OLS", {
-  source("R/simulation.R")
-  source("R/model_ols.R")
-  source("R/model_ridge.R")
-
   sim <- simulate_factor_panel(n_stocks = 8, n_sectors = 2, n_obs = 156, seed = 11)
   stock <- sim$panel$stock[1]
   d <- sim$panel[sim$panel$stock == stock, , drop = FALSE]
@@ -36,9 +30,6 @@ testthat::test_that("ridge with near-zero penalty approximates OLS", {
 })
 
 testthat::test_that("ridge tuning returns a lambda from the candidate grid", {
-  source("R/simulation.R")
-  source("R/model_ridge.R")
-
   sim <- simulate_factor_panel(n_stocks = 8, n_sectors = 2, n_obs = 52, seed = 12)
   d <- sim$panel[sim$panel$stock == sim$panel$stock[1], , drop = FALSE]
   grid <- c(1e-3, 1e-2, 1e-1, 1, 10)
@@ -58,10 +49,6 @@ testthat::test_that("ridge tuning returns a lambda from the candidate grid", {
 })
 
 testthat::test_that("ridge estimator has OLS-compatible beta schema and truth join", {
-  source("R/simulation.R")
-  source("R/model_ridge.R")
-  source("R/evaluation.R")
-
   sim <- simulate_factor_panel(n_stocks = 12, n_sectors = 3, n_obs = 52, seed = 13)
   est <- fit_ridge_betas(
     sim$panel,
@@ -82,8 +69,6 @@ testthat::test_that("ridge estimator has OLS-compatible beta schema and truth jo
 })
 
 testthat::test_that("ridge rejects invalid predictor scales and lambdas", {
-  source("R/model_ridge.R")
-
   x <- cbind(a = rep(1, 10), b = seq_len(10))
   y <- rnorm(10)
   testthat::expect_error(fit_ridge_core(x, y, 1), "positive finite")
