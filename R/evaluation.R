@@ -85,10 +85,73 @@ run_ols_recovery_experiment <- function(
     joined <- join_estimates_to_truth(est, sim$truth$stock)
     summary <- summarise_beta_recovery(joined)
     summary$n_obs <- sample_sizes[j]
+    summary$estimator <- "OLS"
     results[[j]] <- summary
   }
 
   out <- do.call(rbind, results)
+  rownames(out) <- NULL
+  out
+}
+
+run_ridge_recovery_experiment <- function(
+    sample_sizes = c(26L, 52L, 104L, 156L, 260L, 520L),
+    n_stocks = 100L,
+    n_sectors = 10L,
+    seed = 123L,
+    lambda_grid = ridge_lambda_grid()) {
+
+  results <- vector("list", length(sample_sizes))
+
+  for (j in seq_along(sample_sizes)) {
+    sim <- simulate_factor_panel(
+      n_stocks = n_stocks,
+      n_sectors = n_sectors,
+      n_obs = sample_sizes[j],
+      seed = seed + j - 1L
+    )
+
+    est <- fit_ridge_betas(
+      sim$panel,
+      sim$metadata$factor_names,
+      lambda_grid = lambda_grid
+    )
+    joined <- join_estimates_to_truth(est, sim$truth$stock)
+    summary <- summarise_beta_recovery(joined)
+    summary$n_obs <- sample_sizes[j]
+    summary$estimator <- "Ridge"
+    results[[j]] <- summary
+  }
+
+  out <- do.call(rbind, results)
+  rownames(out) <- NULL
+  out
+}
+
+run_baseline_recovery_experiment <- function(
+    sample_sizes = c(26L, 52L, 104L, 156L, 260L, 520L),
+    n_stocks = 100L,
+    n_sectors = 10L,
+    seed = 123L,
+    lambda_grid = ridge_lambda_grid()) {
+
+  ols <- run_ols_recovery_experiment(
+    sample_sizes = sample_sizes,
+    n_stocks = n_stocks,
+    n_sectors = n_sectors,
+    seed = seed
+  )
+
+  ridge <- run_ridge_recovery_experiment(
+    sample_sizes = sample_sizes,
+    n_stocks = n_stocks,
+    n_sectors = n_sectors,
+    seed = seed,
+    lambda_grid = lambda_grid
+  )
+
+  out <- rbind(ols, ridge)
+  out <- out[, c("estimator", "n_obs", "factor", "n", "bias", "mae", "rmse")]
   rownames(out) <- NULL
   out
 }
