@@ -1,0 +1,35 @@
+name: Baseline recovery results
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase-1-simulation]
+    paths:
+      - "scripts/run_baseline_recovery.R"
+      - ".github/workflows/baseline-results.yml"
+
+jobs:
+  baseline-results:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - name: Run OLS versus ridge recovery experiment
+        run: Rscript scripts/run_baseline_recovery.R
+
+      - name: Upload recovery tables
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-recovery-results
+          path: |
+            output/baseline_recovery.csv
+            output/baseline_recovery_overall.csv
+            output/baseline_ridge_advantage.csv
+          if-no-files-found: error
