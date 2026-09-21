@@ -1,0 +1,126 @@
+---
+title: "OLS vs Ridge: Parameter-Recovery Baselines"
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Research question
+
+Before introducing hierarchical Bayes, test whether generic shrinkage already improves stock-level factor-beta estimation.
+
+The comparison is deliberately narrow:
+
+1. stock-by-stock OLS;
+2. stock-by-stock ridge regression;
+3. identical simulated panels with known true betas;
+4. a fixed sample-size grid from 26 to 520 weekly observations.
+
+Ridge tuning is performed with expanding-window validation. Predictor centering and scaling are estimated inside each training fold only.
+
+```{r}
+source("R/simulation.R")
+source("R/model_ols.R")
+source("R/model_ridge.R")
+source("R/evaluation.R")
+
+sample_sizes <- c(26L, 52L, 104L, 156L, 260L, 520L)
+lambda_grid <- ridge_lambda_grid(n = 21L)
+```
+
+## One-panel sanity check
+
+```{r}
+sim <- simulate_factor_panel(
+  n_stocks = 100L,
+  n_sectors = 10L,
+  n_obs = 156L,
+  seed = 123L
+)
+
+ols <- fit_ols_betas(sim$panel, sim$metadata$factor_names)
+ridge <- fit_ridge_betas(
+  sim$panel,
+  sim$metadata$factor_names,
+  lambda_grid = lambda_grid
+)
+
+ols_joined <- join_estimates_to_truth(ols, sim$truth$stock)
+ridge_joined <- join_estimates_to_truth(ridge, sim$truth$stock)
+
+ols_summary <- summarise_beta_recovery(ols_joined)
+ridge_summary <- summarise_beta_recovery(ridge_joined)
+
+ols_summary$estimator <- "OLS"
+ridge_summary$estimator <- "Ridge"
+rbind(ols_summary, ridge_summary)
+```
+
+## How much shrinkage is being selected?
+
+```{r}
+stock_lambdas <- unique(ridge[, c("stock", "lambda", "cv_mse")])
+summary(stock_lambdas$lambda)
+```
+
+The selected lambda is allowed to differ across stocks because the signal-to-noise ratio differs across return series. The factor design matrix is shared in the simulation, but the response noise is stock-specific.
+
+## Data-scarcity experiment
+
+```{r}
+baselines <- run_baseline_recovery_experiment(
+  sample_sizes = sample_sizes,
+  n_stocks = 100L,
+  n_sectors = 10L,
+  seed = 123L,
+  lambda_grid = lambda_grid
+)
+
+baselines
+```
+
+## Overall recovery curve
+
+```{r}
+overall <- baselines[baselines$factor == "ALL", ]
+
+plot(
+  overall$n_obs[overall$estimator == "OLS"],
+  overall$rmse[overall$estimator == "OLS"],
+  type = "b",
+  xlab = "Weekly observations available",
+  ylab = "Beta RMSE",
+  main = "Parameter recovery: OLS vs ridge"
+)
+lines(
+  overall$n_obs[overall$estimator == "Ridge"],
+  overall$rmse[overall$estimator == "Ridge"],
+  type = "b",
+  lty = 2
+)
+legend("topright", legend = c("OLS", "Ridge"), lty = c(1, 2), pch = 1)
+```
+
+## Factor-by-factor recovery
+
+```{r}
+factor_rows <- baselines[baselines$factor != "ALL", ]
+wide <- reshape(
+  factor_rows[, c("estimator", "n_obs", "factor", "rmse")],
+  idvar = c("n_obs", "factor"),
+  timevar = "estimator",
+  direction = "wide"
+)
+wide$ridge_minus_ols_rmse <- wide$rmse.Ridge - wide$rmse.OLS
+wide[order(wide$n_obs, wide$factor), ]
+```
+
+Negative values of `ridge_minus_ols_rmse` indicate that ridge recovers the known beta more accurately than OLS.
+
+## Interpretation rule
+
+This notebook is a benchmark, not a demonstration that ridge must win. If ridge fails to improve recovery, that is a result. The later hierarchical Bayesian model must beat both OLS and ridge on the same simulated designs before claims about economically structured pooling are credible.
